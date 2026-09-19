@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cadenceur de régularité</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cadenceur">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#0f141b">
+
+<style>
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --line:#cfd6df; --text:#141a22; --muted:#566274;
+  --focus:#1c4fd8;
+  --ok:#3ddc84; --early:#5aa2ff; --late:#ff6a5c; --status-ink:#0a1018;
+  --idle:#dfe4ea; --idle-ink:#141a22;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f141b; --panel:#171e28; --line:#2a3442; --text:#e9eef5; --muted:#93a1b4;
+    --focus:#9db8ff; --idle:#222c3a; --idle-ink:#e9eef5;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f141b; --panel:#171e28; --line:#2a3442; --text:#e9eef5; --muted:#93a1b4;
+  --focus:#9db8ff; --idle:#222c3a; --idle-ink:#e9eef5;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0;min-height:100%;background:var(--bg);color:var(--text);
+  font:400 16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+button,input,summary{font:inherit;color:inherit}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px 40px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0}
+h1{margin:0;font:700 30px/1 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;letter-spacing:.01em}
+h2{margin:28px 0 8px;font:600 24px/1.1 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif}
+h3{margin:0;font:600 26px/1.1 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif}
+p{margin:0}
+.help,.meta,.note,.msg{color:var(--muted);font-size:14px}
+
+/* Boutons: la couleur est réservée à l'état de la cadence */
+.btn{
+  min-height:48px;padding:0 20px;border-radius:10px;border:1.5px solid var(--text);
+  background:transparent;color:var(--text);font-weight:600;cursor:pointer;
+}
+.btn.primary{background:var(--text);color:var(--bg)}
+.btn.small{min-height:40px;padding:0 14px}
+.btn.big{min-height:66px;font-size:21px;width:100%}
+.btn.danger{background:var(--late);border-color:var(--late);color:var(--status-ink)}
+.btn:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.btn:active{transform:translateY(1px)}
+
+.f{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+.f>span{font-size:14px;color:var(--muted)}
+input[type=text],input:not([type]),input[type=time]{
+  min-height:48px;padding:0 12px;border-radius:8px;border:1.5px solid var(--line);
+  background:var(--panel);font-size:18px;width:100%;
+}
+input:disabled{opacity:.6}
+.check{display:flex;align-items:center;gap:10px;margin-top:12px}
+.check input{width:22px;height:22px}
+
+/* Liste */
+.sec-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 12px}
+.sec-head h2{margin:0}
+.stages{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.stage{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}
+.stage>div:first-child{flex:1 1 220px;display:flex;flex-direction:column;gap:3px}
+.stage .acts{display:flex;gap:8px;align-items:center}
+.empty{padding:20px 0;color:var(--muted)}
+
+/* Éditeur */
+.seg{display:grid;grid-template-columns:1fr 1fr 44px;gap:10px;align-items:end;margin-top:4px}
+.seg .icon{min-height:48px;width:44px;border-radius:8px;border:1.5px solid var(--line);background:transparent;font-size:24px;line-height:1;cursor:pointer}
+.seg .icon-space{display:block}
+#segs{margin-bottom:14px}
+.sum{margin-top:16px;font:600 22px/1.2 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;min-height:26px}
+.err{margin-top:8px;color:#c62828;font-weight:500;min-height:20px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .err{color:#ff8b80}}
+:root[data-theme="dark"] .err{color:#ff8b80}
+.bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+
+/* Course */
+.rname{font-size:26px;margin:0 0 10px}
+.gps{display:flex;align-items:center;gap:8px;font-size:14px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+.gps i{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.gps.ok i{background:var(--ok)}
+.gps.weak i{background:#f5b731}
+.gps.bad i{background:var(--late)}
+.gps.sim i{background:var(--early)}
+.note{margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+
+.field{
+  border-radius:16px;padding:20px 18px 16px;display:flex;flex-direction:column;justify-content:center;gap:4px;
+  min-height:min(48vh,400px);background:var(--idle);color:var(--idle-ink);
+  transition:background-color .25s ease;
+}
+.field[data-state="ok"]{background:var(--ok);color:var(--status-ink)}
+.field[data-state="early"]{background:var(--early);color:var(--status-ink)}
+.field[data-state="late"]{background:var(--late);color:var(--status-ink)}
+.word{font:600 clamp(24px,7vw,36px)/1.1 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif}
+.gap{
+  display:flex;align-items:baseline;gap:.1em;max-width:100%;overflow:hidden;white-space:nowrap;
+  font:700 clamp(88px,30vw,210px)/.92 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+.gap small{font-size:.3em;font-weight:600}
+.hint{font-size:18px;font-weight:500;min-height:26px}
+.gauge{margin-top:10px}
+.field.nogauge .gauge{visibility:hidden}
+.track{position:relative;height:16px;border-radius:8px;background:rgba(0,0,0,.2)}
+.zone{position:absolute;top:0;bottom:0;left:calc(50% - var(--zone)/2);width:var(--zone);background:rgba(0,0,0,.28);border-radius:4px}
+.mark{position:absolute;top:-5px;width:6px;height:26px;margin-left:-3px;border-radius:3px;background:currentColor;left:50%}
+.ends{display:flex;justify-content:space-between;font-size:13px;margin-top:6px;opacity:.85}
+
+.readouts{display:grid;grid-template-columns:repeat(3,1fr);margin-top:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.ro{padding:12px 10px;border-left:1px solid var(--line);min-width:0}
+.ro:first-child{border-left:0}
+.ro .l{color:var(--muted);font-size:13px}
+.ro .v{font:600 clamp(24px,7.4vw,42px)/1.05 "Avenir Next Condensed","Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ro .s{color:var(--muted);font-size:12px}
+.next{margin-top:12px;font-size:18px;font-weight:500}
+
+.ctl{margin-top:16px;display:grid;gap:12px}
+.armrow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+.armrow .f{margin-top:0}
+.adj>span{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
+.adj>div{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.test{border-top:1px solid var(--line);padding-top:10px}
+.test summary{cursor:pointer;color:var(--muted);font-size:14px;min-height:32px}
+
+@media (prefers-reduced-motion: reduce){.field{transition:none}.btn:active{transform:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<noscript>Cette application a besoin de JavaScript.</noscript>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- Outils ---------- */
+const $=(s,r)=>(r||document).querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+};
+const uid=()=>Math.random().toString(36).slice(2,10);
+const num=v=>{const n=parseFloat(String(v).trim().replace(',','.'));return isFinite(n)?n:NaN;};
+const dec=(n,p)=>n.toFixed(p).replace('.',',');
+const fmtNum=n=>String(Math.round(n*1000)/1000).replace('.',',');
+const fmtKm=km=>dec(km,3);
+const fmtTime=s=>{
+  const tt=Math.round(Math.max(0,s)*10);
+  const m=Math.floor(tt/600), sec=(tt%600)/10;
+  return String(m).padStart(2,'0')+':'+(sec<10?'0':'')+dec(sec,1);
+};
+const fmtCount=s=>{
+  const t=Math.ceil(s), h=Math.floor(t/3600), m=Math.floor((t%3600)/60), x=t%60;
+  const p=n=>String(n).padStart(2,'0');
+  return h>0?h+':'+p(m)+':'+p(x):p(m)+':'+p(x);
+};
+const fmtGap=g=>{
+  const a=Math.abs(g);
+  if(a<0.05) return '0,0';
+  const t=a>=100?String(Math.round(a)):dec(a,1);
+  return (g<0?'−':'+')+t;
+};
+function twoStep(btn,confirmText,action){
+  if(btn.dataset.armed){action();return;}
+  btn.dataset.armed='1';
+  const old=btn.textContent;
+  btn.textContent=confirmText;
+  btn.classList.add('danger');
+  setTimeout(()=>{
+    if(btn.isConnected){delete btn.dataset.armed;btn.textContent=old;btn.classList.remove('danger');}
+  },3000);
+}
+
+/* ---------- Données ---------- */
+const defaultStages=[{
+  id:uid(),name:'Exemple, 12 km',length:12,
+  segs:[{from:0,avg:42},{from:4.5,avg:50},{from:9,avg:38}]
+}];
+let stages=store.get('cad_stages',null);
+if(!Array.isArray(stages)) stages=defaultStages;
+let settings=Object.assign({tol:2,coef:1},store.get('cad_settings',{}));
+const saveStages=()=>store.set('cad_stages',stages);
+const saveSettings=()=>store.set('cad_settings',settings);
+
+/* ---------- Calcul de la cadence ---------- */
+const sortedSegs=st=>st.segs.slice().sort((a,b)=>a.from-b.from);
+
+// Temps théorique (secondes) pour atteindre la distance km depuis le départ
+function theoTime(st,km){
+  const s=sortedSegs(st);let t=0;
+  for(let i=0;i<s.length;i++){
+    const a=s[i].from;
+    if(km<=a||a>=st.length) break;
+    const b=i+1<s.length?Math.min(s[i+1].from,st.length):st.length;
+    t+=(Math.min(km,b)-a)/s[i].avg*3600;
+    if(km<=b) break;
+  }
+  return t;
+}
+function segIndex(st,km){
+  const s=sortedSegs(st);let idx=0;
+  for(let i=0;i<s.length;i++){if(s[i].from<=km) idx=i;}
+  return idx;
+}
+const statusOf=gap=>Math.abs(gap)<=settings.tol?'ok':(gap>0?'late':'early');
+const STATUS_LABEL={ok:'Dans la moyenne',early:'En avance',late:'En retard'};
+const STATUS_HINT={ok:'Garde ce rythme',early:'Ralentis',late:'Accélère'};
+
+function haversine(a,b){
+  const R=6371008.8,r=Math.PI/180;
+  const dLat=(b.lat-a.lat)*r,dLon=(b.lon-a.lon)*r;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+
+/* ---------- État global ---------- */
+const app=$('#app');
+let draft=null, draftIsNew=false;
+let run=null, timer=null, watchId=null, wake=null;
+
+/* ---------- Vue : liste ---------- */
+function viewList(){
+  stopRun();
+  const rows=stages.map(st=>{
+    const s=sortedSegs(st);
+    const avgs=s.map(x=>x.avg),lo=Math.min(...avgs),hi=Math.max(...avgs);
+    const range=lo===hi?fmtNum(lo)+' km/h':'de '+fmtNum(lo)+' à '+fmtNum(hi)+' km/h';
+    return `<li class="stage">
+      <div>
+        <h3>${esc(st.name)}</h3>
+        <div class="meta">${fmtNum(st.length)} km, ${s.length} ${s.length>1?'moyennes':'moyenne'} ${range}</div>
+        <div class="meta">Temps théorique ${fmtTime(theoTime(st,st.length))}</div>
+      </div>
+      <div class="acts">
+        <button class="btn" data-act="edit" data-id="${st.id}">Modifier</button>
+        <button class="btn primary" data-act="run" data-id="${st.id}">Lancer</button>
+      </div>
+    </li>`;
+  }).join('');
+  app.innerHTML=`<div class="wrap">
+    <header class="top"><h1>Cadenceur de régularité</h1></header>
+    <main>
+      <div class="sec-head"><h2>Spéciales</h2><button class="btn" data-act="new">Nouvelle spéciale</button></div>
+      ${stages.length?`<ul class="stages">${rows}</ul>`:'<p class="empty">Aucune spéciale. Crée-en une pour définir sa longueur et ses moyennes.</p>'}
+      <h2>Réglages</h2>
+      <label class="f"><span>Zone verte : écart toléré, en secondes</span>
+        <input id="sTol" inputmode="decimal" value="${fmtNum(settings.tol)}"></label>
+      <label class="f"><span>Coefficient de distance GPS</span>
+        <input id="sCoef" inputmode="decimal" value="${dec(settings.coef,4)}"></label>
+      <p class="help" style="margin-top:8px">Si ton tripmaster indique 10,000 km quand le GPS en indique 9,980, mets 1,0020 (tripmaster divisé par GPS).</p>
+    </main>
+  </div>`;
+}
+
+/* ---------- Vue : éditeur ---------- */
+function toDraft(st){
+  return {id:st.id,name:st.name,length:fmtNum(st.length),
+    segs:sortedSegs(st).map(s=>({from:fmtNum(s.from),avg:fmtNum(s.avg)}))};
+}
+function parseDraft(d){
+  const length=num(d.length);
+  if(!(length>0)) return {error:'Indique la longueur de la spéciale en km.'};
+  const segs=[];
+  for(let i=0;i<d.segs.length;i++){
+    const from=i===0?0:num(d.segs[i].from);
+    const avg=num(d.segs[i].avg);
+    const who=i===0?'La première moyenne':'Le changement '+(i+1);
+    if(!isFinite(from)||from<0) return {error:who+' : indique le kilomètre où elle commence.'};
+    if(!(avg>0)) return {error:who+' : indique la moyenne en km/h.'};
+    if(i>0&&from<=segs[i-1].from) return {error:who+' : le kilomètre doit être supérieur au précédent.'};
+    if(from>=length) return {error:who+' : le kilomètre doit être avant la fin de la spéciale.'};
+    segs.push({from,avg});
+  }
+  return {stage:{id:d.id,name:(d.name||'').trim()||'Spéciale',length,segs}};
+}
+function segRows(){
+  $('#segs').innerHTML=draft.segs.map((s,i)=>`
+    <div class="seg" data-i="${i}">
+      <label class="f"><span>${i===0?'Dès le départ, km':'À partir du km'}</span>
+        <input data-k="from" inputmode="decimal" value="${esc(i===0?'0':s.from)}" ${i===0?'disabled':''}></label>
+      <label class="f"><span>Moyenne, km/h</span>
+        <input data-k="avg" inputmode="decimal" value="${esc(s.avg)}"></label>
+      ${i>0?'<button class="icon" data-act="delseg" aria-label="Supprimer ce changement">×</button>':'<span class="icon-space"></span>'}
+    </div>`).join('');
+}
+function updateSum(){
+  const r=parseDraft(draft),el=$('#sum');
+  if(!el) return;
+  el.textContent=r.stage?'Temps théorique '+fmtTime(theoTime(r.stage,r.stage.length)):'';
+}
+function viewEditor(id){
+  stopRun();
+  const src=stages.find(s=>s.id===id);
+  draftIsNew=!src;
+  draft=src?toDraft(src):{id:uid(),name:'',length:'',segs:[{from:'0',avg:''}]};
+  app.innerHTML=`<div class="wrap">
+    <header class="top"><button class="btn small" data-act="home">‹ Spéciales</button><h1>${draftIsNew?'Nouvelle spéciale':'Modifier la spéciale'}</h1></header>
+    <main>
+      <label class="f"><span>Nom</span><input id="eName" value="${esc(draft.name)}" placeholder="Spéciale 1"></label>
+      <label class="f"><span>Longueur, km</span><input id="eLen" inputmode="decimal" value="${esc(draft.length)}" placeholder="12,5"></label>
+      <h2>Moyennes</h2>
+      <p class="help">Indique à partir de quel kilomètre chaque moyenne s'applique. La première commence au départ.</p>
+      <div id="segs"></div>
+      <button class="btn" data-act="addseg">Ajouter un changement de moyenne</button>
+      <p class="sum" id="sum"></p>
+      <p class="err" id="err" role="alert"></p>
+      <div class="bar">
+        <button class="btn primary" data-act="save">Enregistrer</button>
+        ${draftIsNew?'':'<button class="btn" data-act="dup">Dupliquer</button><button class="btn" data-act="del">Supprimer</button>'}
+      </div>
+    </main>
+  </div>`;
+  segRows();updateSum();
+}
+
+/* ---------- Vue : course ---------- */
+function viewRun(id){
+  const st=stages.find(s=>s.id===id);
+  if(!st){viewList();return;}
+  stopRun();
+  run={
+    stage:JSON.parse(JSON.stringify(st)),state:'idle',startTs:0,dist:0,offset:0,
+    last:null,speed:0,lastFixAt:0,acc:null,gotFix:false,weak:false,gpsErr:null,
+    sim:false,simSpeed:45,lastTick:Date.now(),final:null,armLabel:'',gpsPaintAt:0
+  };
+  app.innerHTML=`<div class="wrap run">
+    <header class="top">
+      <button class="btn small" data-act="leave">‹ Spéciales</button>
+      <div class="gps wait" id="gps"><i></i><span>Recherche du GPS</span></div>
+    </header>
+    <h1 class="rname">${esc(st.name)}</h1>
+    <p class="note" id="gpsNote" hidden></p>
+    <section class="field" id="field" data-state="idle" role="group" aria-label="Écart avec la moyenne">
+      <div class="word" id="word"></div>
+      <div class="gap"><span id="gapN"></span><small id="gapU"></small></div>
+      <div class="hint" id="hint"></div>
+      <div class="gauge" style="--zone:${Math.min(100,settings.tol*10)}%">
+        <div class="track"><span class="zone"></span><span class="mark" id="mark"></span></div>
+        <div class="ends"><span>Avance</span><span>Retard</span></div>
+      </div>
+    </section>
+    <section class="readouts">
+      <div class="ro"><div class="l">Distance</div><div class="v" id="rDist">0,000</div><div class="s">sur ${fmtKm(st.length)} km</div></div>
+      <div class="ro"><div class="l">Temps</div><div class="v" id="rTime">00:00,0</div><div class="s" id="rTheo">&nbsp;</div></div>
+      <div class="ro"><div class="l">Moyenne</div><div class="v" id="rAvg">–</div><div class="s">km/h</div></div>
+    </section>
+    <p class="next" id="rNext">&nbsp;</p>
+    <section class="ctl" id="ctl"></section>
+  </div>`;
+  renderControls();
+  paintIdle();
+  startGps();
+  requestWake();
+  timer=setInterval(tick,100);
+}
+
+function renderControls(){
+  const el=$('#ctl');if(!el||!run) return;
+  let h='';
+  if(run.state==='idle'){
+    h=`<button class="btn primary big" data-act="start">Départ maintenant</button>
+      <div class="armrow">
+        <label class="f"><span>Ou départ à l'heure exacte</span><input id="startTime" type="time" step="1"></label>
+        <button class="btn" data-act="arm">Armer</button>
+      </div>
+      <p class="msg" id="armMsg">Le chrono suit l'heure de ton téléphone : vérifie qu'elle est réglée automatiquement.</p>
+      <details class="test"><summary>Test sans GPS</summary>
+        <label class="check"><input type="checkbox" id="simOn" ${run.sim?'checked':''}> Simuler la conduite</label>
+        <label class="f"><span>Vitesse simulée, km/h</span><input id="simSpeed" inputmode="decimal" value="${fmtNum(run.simSpeed)}"></label>
+      </details>`;
+  }else if(run.state==='armed'){
+    h=`<p class="msg">Départ programmé à ${esc(run.armLabel)}. Reste immobile sur la ligne.</p>
+       <button class="btn" data-act="cancel">Annuler le départ</button>`;
+  }else if(run.state==='running'){
+    h=`<div class="adj"><span>Corriger la distance en mètres</span><div>
+        <button class="btn" data-act="adj" data-v="-50">−50</button>
+        <button class="btn" data-act="adj" data-v="-10">−10</button>
+        <button class="btn" data-act="adj" data-v="10">+10</button>
+        <button class="btn" data-act="adj" data-v="50">+50</button></div></div>
+       <p class="msg" id="offNote">Aucune correction</p>
+       <button class="btn" data-act="stop">Arrêter la spéciale</button>`;
+  }else{
+    h=`<button class="btn primary big" data-act="reset">Recommencer</button>`;
+  }
+  el.innerHTML=h;
+}
+
+function paint(o){
+  const f=$('#field');if(!f) return;
+  f.dataset.state=o.state;
+  $('#word').textContent=o.word;
+  $('#gapN').textContent=o.gap;
+  $('#gapU').textContent=o.unit||'';
+  $('#hint').textContent=o.hint||'';
+  f.classList.toggle('nogauge',!o.gauge);
+  if(o.gauge) $('#mark').style.left=(50+Math.max(-10,Math.min(10,o.gapVal))*5)+'%';
+}
+function paintIdle(){
+  paint({state:'idle',word:'Prêt',gap:'–',unit:'',hint:'Lance le départ une fois sur la ligne.',gauge:false});
+  $('#rDist').textContent='0,000';
+  $('#rTime').textContent='00:00,0';
+  $('#rTheo').innerHTML='&nbsp;';
+  const s=sortedSegs(run.stage);
+  $('#rAvg').textContent=fmtNum(s[0].avg);
+  $('#rNext').innerHTML=s.length>1?`Changement de moyenne au km ${fmtNum(s[1].from)}`:'&nbsp;';
+}
+function paintGps(){
+  const g=$('#gps');if(!g||!run) return;
+  let cls='wait',txt='Recherche du GPS';
+  const age=run.lastFixAt?Date.now()-run.lastFixAt:Infinity;
+  if(run.sim){cls='sim';txt='Simulation';}
+  else if(run.gpsErr){cls='bad';txt=run.gpsErr;}
+  else if(!run.gotFix){cls='wait';txt='Recherche du GPS';}
+  else if(run.weak){cls='weak';txt='GPS imprécis, ±'+Math.round(run.acc)+' m';}
+  else if(age>5000){cls='bad';txt='Signal GPS perdu';}
+  else{cls='ok';txt='GPS ±'+Math.round(run.acc)+' m';}
+  g.className='gps '+cls;
+  g.lastElementChild.textContent=txt;
+}
+
+/* ---------- Moteur de course ---------- */
+function begin(){
+  run.state='running';
+  run.dist=0;run.offset=0;run.final=null;
+  renderControls();
+}
+function finish(elapsed,km){
+  const st=run.stage;
+  const over=(km-st.length)*1000;
+  const v=run.sim?run.simSpeed/3.6:run.speed;
+  const el=v>1?elapsed-over/v:elapsed;
+  const gap=el-theoTime(st,st.length);
+  run.final={elapsed:el,gap};
+  run.state='done';
+  renderControls();
+  const s=statusOf(gap);
+  $('#rDist').textContent=fmtKm(st.length);
+  $('#rTime').textContent=fmtTime(el);
+  $('#rTheo').textContent='théorique '+fmtTime(theoTime(st,st.length));
+  $('#rNext').innerHTML='&nbsp;';
+  paint({state:s,word:'Terminée : '+STATUS_LABEL[s].toLowerCase(),gap:fmtGap(gap),unit:' s',hint:'',gauge:true,gapVal:gap});
+}
+function tick(){
+  if(!run) return;
+  const now=Date.now();
+  const dt=(now-run.lastTick)/1000;
+  run.lastTick=now;
+  if(now-run.gpsPaintAt>1000){run.gpsPaintAt=now;paintGps();}
+
+  if(run.state==='armed'){
+    const rem=(run.startTs-now)/1000;
+    if(rem<=0){begin();}
+    else{
+      paint({state:'idle',word:'Départ dans',gap:fmtCount(rem),unit:'',hint:'Départ à '+run.armLabel,gauge:false});
+      return;
+    }
+  }
+  if(run.state!=='running') return;
+
+  const st=run.stage;
+  if(run.sim) run.dist+=run.simSpeed/3.6*dt;
+  let extra=0;
+  if(!run.sim&&run.speed>0.8&&run.lastFixAt){
+    extra=run.speed*settings.coef*Math.min((now-run.lastFixAt)/1000,2);
+  }
+  const km=Math.max(0,(run.dist+extra+run.offset)/1000);
+  const elapsed=(now-run.startTs)/1000;
+  if(km>=st.length){finish(elapsed,km);return;}
+
+  const gap=elapsed-theoTime(st,km);
+  const s=statusOf(gap);
+  const segs=sortedSegs(st),idx=segIndex(st,km),cur=segs[idx],next=segs[idx+1];
+  paint({state:s,word:STATUS_LABEL[s],gap:fmtGap(gap),unit:' s',hint:STATUS_HINT[s],gauge:true,gapVal:gap});
+  $('#rDist').textContent=fmtKm(km);
+  $('#rTime').textContent=fmtTime(elapsed);
+  $('#rTheo').textContent='théorique '+fmtTime(theoTime(st,km));
+  $('#rAvg').textContent=fmtNum(cur.avg);
+  $('#rNext').textContent=next
+    ?'Dans '+fmtKm(next.from-km)+' km : '+fmtNum(next.avg)+' km/h'
+    :'Arrivée dans '+fmtKm(st.length-km)+' km';
+  const off=$('#offNote');
+  if(off) off.textContent=run.offset===0?'Aucune correction':'Correction de '+(run.offset>0?'+':'−')+Math.abs(run.offset)+' m';
+}
+
+/* ---------- GPS ---------- */
+function startGps(){
+  if(!('geolocation' in navigator)){run.gpsErr='GPS indisponible';paintGps();return;}
+  try{
+    watchId=navigator.geolocation.watchPosition(onPos,onGpsErr,
+      {enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  }catch(e){run.gpsErr='GPS indisponible';paintGps();}
+}
+function onGpsErr(err){
+  if(!run) return;
+  if(err&&err.code===1){
+    run.gpsErr='GPS refusé';
+    const n=$('#gpsNote');
+    if(n){n.hidden=false;n.textContent="La localisation est bloquée. Autorise-la pour ce site dans les réglages du navigateur. Si la demande n'apparaît pas, ouvre ce lien directement dans Safari ou Chrome.";}
+  }else if(err&&err.code===3){run.gpsErr='Pas de signal GPS';}
+  else{run.gpsErr='GPS indisponible';}
+  paintGps();
+}
+function onPos(p){
+  if(!run) return;
+  const c=p.coords,now=Date.now();
+  run.gpsErr=null;
+  const n=$('#gpsNote');if(n) n.hidden=true;
+  run.gotFix=true;run.acc=c.accuracy;
+  if(run.sim){paintGps();return;}
+  if(c.accuracy>30){run.weak=true;paintGps();return;}
+  run.weak=false;
+  const cur={lat:c.latitude,lon:c.longitude,t:p.timestamp||now};
+  let v=(typeof c.speed==='number'&&isFinite(c.speed))?c.speed:null;
+  if(run.last){
+    const d=haversine(run.last,cur),dtS=(cur.t-run.last.t)/1000;
+    if(dtS>0){
+      if(v===null) v=d/dtS;
+      if(run.state==='running'&&v>0.8&&d/dtS<90) run.dist+=d*settings.coef;
+    }
+  }
+  run.speed=v||0;run.lastFixAt=now;run.last=cur;
+  paintGps();
+}
+async function requestWake(){
+  try{if('wakeLock' in navigator) wake=await navigator.wakeLock.request('screen');}catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(run&&document.visibilityState==='visible') requestWake();
+});
+function stopRun(){
+  if(timer){clearInterval(timer);timer=null;}
+  if(watchId!==null&&'geolocation' in navigator){try{navigator.geolocation.clearWatch(watchId);}catch(e){}}
+  watchId=null;
+  if(wake){try{wake.release();}catch(e){}wake=null;}
+  run=null;
+}
+
+/* ---------- Actions ---------- */
+function armStart(){
+  const v=($('#startTime')||{}).value;
+  const msg=$('#armMsg');
+  if(!v){msg.textContent='Choisis une heure de départ.';return;}
+  const p=v.split(':').map(Number);
+  const t=new Date();
+  t.setHours(p[0],p[1],p[2]||0,0);
+  if(t.getTime()<=Date.now()+500){msg.textContent="Cette heure est déjà passée. Choisis une heure à venir.";return;}
+  run.startTs=t.getTime();
+  run.armLabel=v.length===5?v+':00':v;
+  run.state='armed';
+  renderControls();
+}
+
+app.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');
+  if(!b) return;
+  const act=b.dataset.act;
+  switch(act){
+    case 'home': viewList();break;
+    case 'new': viewEditor(null);break;
+    case 'edit': viewEditor(b.dataset.id);break;
+    case 'run': viewRun(b.dataset.id);break;
+    case 'leave':
+      if(run&&(run.state==='running'||run.state==='armed')) twoStep(b,'Quitter ?',viewList);
+      else viewList();
+      break;
+    case 'addseg':
+      draft.segs.push({from:'',avg:''});segRows();updateSum();
+      const rows=document.querySelectorAll('#segs .seg');
+      const last=rows[rows.length-1];if(last) last.querySelector('input').focus();
+      break;
+    case 'delseg':{
+      const i=+b.closest('.seg').dataset.i;
+      draft.segs.splice(i,1);segRows();updateSum();break;
+    }
+    case 'save':{
+      const r=parseDraft(draft);
+      if(r.error){$('#err').textContent=r.error;return;}
+      const i=stages.findIndex(s=>s.id===r.stage.id);
+      if(i>=0) stages[i]=r.stage;else stages.push(r.stage);
+      saveStages();viewList();break;
+    }
+    case 'dup':{
+      const r=parseDraft(draft);
+      if(r.error){$('#err').textContent=r.error;return;}
+      stages.push(Object.assign({},r.stage,{id:uid(),name:r.stage.name+' (copie)'}));
+      saveStages();viewList();break;
+    }
+    case 'del':
+      twoStep(b,'Confirmer la suppression',()=>{
+        stages=stages.filter(s=>s.id!==draft.id);saveStages();viewList();
+      });
+      break;
+    case 'start':
+      if(!run) return;
+      run.startTs=Date.now();begin();break;
+    case 'arm': armStart();break;
+    case 'cancel': run.state='idle';renderControls();paintIdle();break;
+    case 'stop':
+      twoStep(b,'Toucher encore pour arrêter',()=>{run.state='idle';renderControls();paintIdle();});
+      break;
+    case 'reset':
+      run.state='idle';run.dist=0;run.offset=0;run.final=null;renderControls();paintIdle();break;
+    case 'adj':
+      if(run&&run.state==='running') run.offset+=Number(b.dataset.v);
+      break;
+  }
+});
+
+app.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.id==='eName'){draft.name=t.value;}
+  else if(t.id==='eLen'){draft.length=t.value;updateSum();}
+  else if(t.closest&&t.closest('.seg')){
+    const i=+t.closest('.seg').dataset.i;
+    draft.segs[i][t.dataset.k]=t.value;updateSum();
+  }
+  else if(t.id==='simOn'){run.sim=t.checked;paintGps();}
+  else if(t.id==='simSpeed'){const n=num(t.value);if(n>0) run.simSpeed=n;}
+});
+app.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='sTol'){
+    const n=num(t.value);
+    settings.tol=isFinite(n)?Math.min(30,Math.max(0.1,n)):2;
+    t.value=fmtNum(settings.tol);saveSettings();
+  }else if(t.id==='sCoef'){
+    const n=num(t.value);
+    settings.coef=isFinite(n)?Math.min(1.1,Math.max(0.9,n)):1;
+    t.value=dec(settings.coef,4);saveSettings();
+  }
+});
+
+viewList();
+if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+})();
+</script>
+</body>
+</html>
