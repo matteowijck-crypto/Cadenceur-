@@ -136,6 +136,8 @@ input:disabled{opacity:.6}
 .armrow .f{margin-top:0}
 .adj>span{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
 .adj>div{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.adj-big{grid-template-columns:1fr 1fr!important;gap:12px!important}
+.adjbtn{min-height:72px!important;font-size:26px!important;font-weight:700}
 .test{border-top:1px solid var(--line);padding-top:10px}
 .test summary{cursor:pointer;color:var(--muted);font-size:14px;min-height:32px}
 
@@ -390,11 +392,9 @@ function renderControls(){
     h=`<p class="msg">Départ programmé à ${esc(run.armLabel)}. Reste immobile sur la ligne.</p>
        <button class="btn" data-act="cancel">Annuler le départ</button>`;
   }else if(run.state==='running'){
-    h=`<div class="adj"><span>Corriger la distance en mètres</span><div>
-        <button class="btn" data-act="adj" data-v="-50">−50</button>
-        <button class="btn" data-act="adj" data-v="-10">−10</button>
-        <button class="btn" data-act="adj" data-v="10">+10</button>
-        <button class="btn" data-act="adj" data-v="50">+50</button></div></div>
+    h=`<div class="adj"><span>Corriger la distance en mètres</span><div class="adj-big">
+        <button class="btn adjbtn" data-act="adj" data-v="-50">−50</button>
+        <button class="btn adjbtn" data-act="adj" data-v="50">+50</button></div></div>
        <p class="msg" id="offNote">Aucune correction</p>
        <button class="btn" data-act="stop">Arrêter la spéciale</button>`;
   }else{
